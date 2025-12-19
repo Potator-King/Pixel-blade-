@@ -1,7 +1,8 @@
 -- Configurações
-_G.AutoFarm = true -- Mude para false para parar
-local ferramentaNome = "Diamond Sword" -- Nome exato que vi na sua print
-local distancia = 5 -- Distância para ficar do Boss (evita bugar dentro dele)
+_G.AutoFarm = true -- Para parar, mude para false e execute novamente
+local ferramentaNome = "Diamond Sword" -- Nome da espada
+local distancia = 4 -- Distância do inimigo
+local pastasAlvo = {"Boss", "Boss2"} -- Nomes exatos das pastas que você mencionou
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,7 +11,7 @@ local LocalPlayer = Players.LocalPlayer
 -- Função para equipar a espada
 local function equiparEspada()
     local char = LocalPlayer.Character
-    if not char then return end
+    if not char or not char:FindFirstChild("Humanoid") then return end
     
     local mochila = LocalPlayer.Backpack
     local espada = mochila:FindFirstChild(ferramentaNome)
@@ -21,55 +22,60 @@ local function equiparEspada()
     end
 end
 
--- Função principal de ataque
-local function farmar()
-    while _G.AutoFarm do
-        local target = nil
-        local char = LocalPlayer.Character
-        
-        -- Procura um inimigo vivo na Workspace
-        -- Baseado nas suas prints, os bosses estão soltos na Workspace
-        for _, v in pairs(workspace:GetChildren()) do
-            -- Verifica se é um modelo, se tem vida e não é você mesmo
-            if v:IsA("Model") and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Name ~= LocalPlayer.Name then
-                if v.Humanoid.Health > 0 then
-                    target = v
-                    break -- Foca neste alvo até morrer ou mudar
+-- Função para encontrar o inimigo vivo mais próximo dentro das pastas
+local function getTarget()
+    for _, nomePasta in pairs(pastasAlvo) do
+        local pasta = workspace:FindFirstChild(nomePasta)
+        if pasta then
+            for _, npc in pairs(pasta:GetChildren()) do
+                -- Verifica se é um modelo válido, com vida e partes físicas
+                if npc:IsA("Model") and npc:FindFirstChild("Humanoid") and npc:FindFirstChild("HumanoidRootPart") then
+                    if npc.Humanoid.Health > 0 then
+                        return npc -- Retorna o primeiro inimigo vivo que achar
+                    end
                 end
             end
         end
+    end
+    return nil -- Retorna nulo se não achar ninguém vivo
+end
 
-        -- Se achou um alvo
+local function farmar()
+    while _G.AutoFarm do
+        local target = getTarget()
+        local char = LocalPlayer.Character
+        
         if target and char and char:FindFirstChild("HumanoidRootPart") then
             local enemyRoot = target.HumanoidRootPart
             local enemyHumanoid = target.Humanoid
             
-            -- Loop de combate: Enquanto o inimigo tiver vida e o AutoFarm estiver ligado
+            -- Loop de combate FOCADO: Só sai daqui quando esse boss específico morrer
             while _G.AutoFarm and enemyHumanoid.Health > 0 and char.Humanoid.Health > 0 do
                 
-                -- 1. Teleporta para trás do inimigo (CFrame)
-                -- O RenderStepped garante que você grude nele mesmo se ele andar
+                -- Se o inimigo ou o player perderem as partes físicas, para o loop
+                if not target:FindFirstChild("HumanoidRootPart") or not char:FindFirstChild("HumanoidRootPart") then
+                    break
+                end
+
+                -- 1. Teleporte (Lock)
+                -- Fica atrás do inimigo. O CFrame mantém a rotação correta.
                 char.HumanoidRootPart.CFrame = enemyRoot.CFrame * CFrame.new(0, 0, distancia)
                 
-                -- 2. Equipa a espada se não estiver equipada
+                -- 2. Ataque
                 equiparEspada()
-                
-                -- 3. Ativa a espada (Clica)
                 local espadaNaMao = char:FindFirstChild(ferramentaNome)
                 if espadaNaMao then
                     espadaNaMao:Activate()
                 end
                 
-                -- Evita crashar o jogo (espera um frame minúsculo)
+                -- Velocidade do loop (Heartbeat é frame a frame)
                 RunService.Heartbeat:Wait()
             end
         else
-            -- Se não tem inimigos, espera um pouco antes de procurar de novo
+            -- Se não tem ninguém vivo nas pastas, espera 1 segundo antes de procurar de novo
             task.wait(1)
         end
-        task.wait()
     end
 end
 
--- Inicia o script
 farmar()
